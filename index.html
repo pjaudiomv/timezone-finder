@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GeoTZ Location Finder</title>
+  <script src="dist/geotz.js"></script>
+  <!-- Leaflet CSS and JS for the map -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    h1 {
+      color: #333;
+    }
+    .input-group {
+      margin: 20px 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+    input {
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      width: 120px;
+    }
+    button {
+      padding: 8px 16px;
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    button:hover {
+      background-color: #3367d6;
+    }
+    #map-container {
+      width: 100%;
+      margin: 20px 0;
+    }
+    #map {
+      height: 400px;
+      width: 100%;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+    #result {
+      margin-top: 20px;
+      padding: 15px;
+      background-color: #f5f5f5;
+      border-radius: 4px;
+      min-height: 30px;
+    }
+    #location-status {
+      margin-top: 10px;
+      color: #666;
+      font-style: italic;
+    }
+    .card {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .timezone-info {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      margin-top: 20px;
+    }
+    .info-box {
+      flex: 1;
+      min-width: 200px;
+      background-color: #f5f5f5;
+      padding: 15px;
+      border-radius: 4px;
+    }
+    .info-label {
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>Timezone Finder</h1>
+  <p>Find the timezone for any location using <a href="https://github.com/kevmo314/browser-geo-tz" target="_blank">browser-geo-tz</a></p>
+
+  <div class="input-group">
+    <label for="lat">Latitude:</label>
+    <input type="text" id="lat" value="38.08122" />
+
+    <label for="lng">Longitude:</label>
+    <input type="text" id="lng" value="-86.45791" />
+
+    <button id="location-btn">Get Current Location</button>
+    <button id="find-btn">Find Timezone</button>
+  </div>
+
+  <div id="location-status"></div>
+</div>
+
+<div class="card">
+  <h2>Interactive Map</h2>
+  <p>Drag the marker to any location or click on the map to set a new position</p>
+  <div id="map-container">
+    <div id="map"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Timezone Results</h2>
+  <div class="timezone-info">
+    <div class="info-box">
+      <div class="info-label">Location:</div>
+      <div id="location-info">38.08122, -86.45791</div>
+    </div>
+    <div class="info-box">
+      <div class="info-label">Timezone:</div>
+      <div id="timezone-info">Loading...</div>
+    </div>
+    <div class="info-box">
+      <div class="info-label">Current Time:</div>
+      <div id="current-time">Loading...</div>
+    </div>
+  </div>
+  <pre id="result"></pre>
+</div>
+
+<script>
+  const findBtn = document.getElementById("find-btn");
+  const locationBtn = document.getElementById("location-btn");
+  const latInput = document.getElementById("lat");
+  const lngInput = document.getElementById("lng");
+  const resultDisplay = document.getElementById("result");
+  const statusDisplay = document.getElementById("location-status");
+  const locationInfo = document.getElementById("location-info");
+  const timezoneInfo = document.getElementById("timezone-info");
+  const currentTimeInfo = document.getElementById("current-time");
+
+  // Initialize map
+  const map = L.map('map').setView([38.08122, -86.45791], 10);
+
+  // Add OpenStreetMap tiles
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(map);
+
+  // Add draggable marker
+  const marker = L.marker([38.08122, -86.45791], {
+    draggable: true
+  }).addTo(map);
+
+  // Update coordinates when marker is dragged
+  marker.on('dragend', function(event) {
+    const position = marker.getLatLng();
+    latInput.value = position.lat.toFixed(6);
+    lngInput.value = position.lng.toFixed(6);
+    updateLocationInfo();
+    findTimezone();
+  });
+
+  // Update marker when clicking on map
+  map.on('click', function(event) {
+    const position = event.latlng;
+    marker.setLatLng(position);
+    latInput.value = position.lat.toFixed(6);
+    lngInput.value = position.lng.toFixed(6);
+    updateLocationInfo();
+    findTimezone();
+  });
+
+  // Update coordinates when input values change
+  function updateCoordinates() {
+    const lat = parseFloat(latInput.value);
+    const lng = parseFloat(lngInput.value);
+
+    if (!isNaN(lat) && !isNaN(lng)) {
+      marker.setLatLng([lat, lng]);
+      map.setView([lat, lng], map.getZoom());
+      updateLocationInfo();
+    }
+  }
+
+  // Update location info display
+  function updateLocationInfo() {
+    locationInfo.textContent = `${latInput.value}, ${lngInput.value}`;
+  }
+
+  // Format time for a timezone
+  function formatTimeInTimezone(timezone) {
+    try {
+      const options = {
+        timeZone: timezone,
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      };
+      return new Date().toLocaleString('en-US', options);
+    } catch (error) {
+      return 'Unable to determine current time';
+    }
+  }
+
+  // Function to find timezone based on coordinates
+  function findTimezone() {
+    const lat = latInput.value;
+    const lng = lngInput.value;
+
+    timezoneInfo.textContent = "Loading...";
+    currentTimeInfo.textContent = "Loading...";
+    resultDisplay.innerHTML = "Loading...";
+
+    GeoTZ.find(lat, lng)
+            .then(function(tz) {
+              resultDisplay.innerHTML = JSON.stringify(tz, null, 2);
+
+              if (tz && tz.length > 0) {
+                const timezone = tz[0];
+                timezoneInfo.textContent = timezone;
+                currentTimeInfo.textContent = formatTimeInTimezone(timezone);
+              } else {
+                timezoneInfo.textContent = "No timezone found";
+                currentTimeInfo.textContent = "N/A";
+              }
+            })
+            .catch(function(error) {
+              resultDisplay.innerHTML = "Error: " + error.message;
+              timezoneInfo.textContent = "Error";
+              currentTimeInfo.textContent = "N/A";
+            });
+  }
+
+  // Get user's current location
+  function getCurrentLocation() {
+    if (!navigator.geolocation) {
+      statusDisplay.textContent = "Geolocation is not supported by your browser";
+      return;
+    }
+
+    statusDisplay.textContent = "Locating...";
+
+    navigator.geolocation.getCurrentPosition(
+            function(position) {
+              const latitude = position.coords.latitude;
+              const longitude = position.coords.longitude;
+
+              latInput.value = latitude.toFixed(6);
+              lngInput.value = longitude.toFixed(6);
+
+              // Update map and marker
+              marker.setLatLng([latitude, longitude]);
+              map.setView([latitude, longitude], 12);
+
+              statusDisplay.textContent = "Location found!";
+              updateLocationInfo();
+
+              // Automatically find timezone after getting location
+              findTimezone();
+            },
+            function(error) {
+              switch(error.code) {
+                case error.PERMISSION_DENIED:
+                  statusDisplay.textContent = "Location permission denied";
+                  break;
+                case error.POSITION_UNAVAILABLE:
+                  statusDisplay.textContent = "Location information unavailable";
+                  break;
+                case error.TIMEOUT:
+                  statusDisplay.textContent = "Location request timed out";
+                  break;
+                default:
+                  statusDisplay.textContent = "Unknown error occurred";
+                  break;
+              }
+            }
+    );
+  }
+
+  // Event listeners
+  findBtn.addEventListener("click", findTimezone);
+  locationBtn.addEventListener("click", getCurrentLocation);
+  latInput.addEventListener("change", updateCoordinates);
+  lngInput.addEventListener("change", updateCoordinates);
+
+  // Initialize
+  updateLocationInfo();
+  findTimezone();
+</script>
+</body>
+</html>
+
