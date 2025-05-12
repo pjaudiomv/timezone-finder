@@ -149,7 +149,7 @@
   const currentTimeInfo = document.getElementById("current-time");
 
   // Initialize map
-  const map = L.map('map').setView([38.08122, -86.45791], 10);
+  const map = L.map('map').setView([38.08122, -86.45791], 5);
 
   // Add OpenStreetMap tiles
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -263,7 +263,7 @@
 
               // Update map and marker
               marker.setLatLng([latitude, longitude]);
-              map.setView([latitude, longitude], 12);
+              map.setView([latitude, longitude], 5);
 
               statusDisplay.textContent = "Location found!";
               updateLocationInfo();
